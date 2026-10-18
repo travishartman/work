@@ -11,7 +11,7 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
             --gap: 6px;
-            --band: 73px; /* top black band, mirrors the footer band below */
+            --bar: 42px; /* lightbox top/bottom band height */
             --cols: 5;
             --fg: #e9e9e9;
             --muted: #8a8a8a;
@@ -33,7 +33,7 @@
             display: grid;
             grid-template-columns: repeat(var(--cols), 1fr);
             gap: var(--gap);
-            padding: var(--band) var(--gap) var(--gap);
+            padding: var(--gap);
             width: 100%;
         }
         .cell {
@@ -86,7 +86,7 @@
         .lightbox.open { display: block; }
         .lightbox .stage {
             position: absolute;
-            inset: 0 0 42px 0;
+            inset: var(--bar) 0 var(--bar) 0;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -94,14 +94,14 @@
         }
         .lightbox img {
             max-width: 100vw;
-            max-height: calc(100vh - 42px);
+            max-height: calc(100vh - var(--bar) * 2);
             object-fit: contain;
             -webkit-user-select: none; user-select: none;
             -webkit-user-drag: none;
             transition: transform .25s ease;
         }
         .lightbox img.rot {
-            max-width: calc(100vh - 42px);
+            max-width: calc(100vh - var(--bar) * 2);
             max-height: 100vw;
             transform: rotate(90deg);
         }
