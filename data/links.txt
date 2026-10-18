@@ -1,0 +1,11 @@
+# Curated fallback / override for the "Recent Work" links, newest first.
+# One Reuters article URL per line. Blank lines and lines starting with # are ignored.
+#
+# The daily scraper merges these URLs with Google Programmable Search results,
+# ranks newest-first, validates each link, pulls share metadata, and writes the
+# top entries into index.html. If live discovery returns nothing, these URLs are
+# the guaranteed floor so the site is always correct.
+https://www.reuters.com/investigates/special-report/syria-security-mass-graves/
+https://www.reuters.com/investigates/special-report/syria-security-mass-graves-methodology/
+https://www.reuters.com/graphics/USA-TEMPERATURE/PRISONS/jnpwbejwlvw/
+https://www.reuters.com/graphics/USA-TRUMP/PUBLIC-LANDS/zdpxkxdwnvx/
