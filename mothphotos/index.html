@@ -148,7 +148,6 @@
         }
         .ctrl:hover { background: rgba(0,0,0,.6); }
         .ctrl.close { top: 14px; right: 14px; }
-        .ctrl.rotate { top: 14px; left: 14px; display: none; }
         .lightbox .lb-copyright {
             position: absolute;
             left: 0; right: 0; bottom: 0;
@@ -160,10 +159,6 @@
             font-size: 14pt;
             padding: 0 16px;
             text-align: center;
-        }
-        /* show rotate affordance on touch / small screens */
-        @media (hover: none), (max-width: 760px) {
-            .ctrl.rotate { display: block; }
         }
     </style>
 </head>
@@ -178,7 +173,6 @@
         <div class="nav prev" id="navPrev" aria-label="Previous"><span class="caret" aria-hidden="true">‹</span></div>
         <div class="nav next" id="navNext" aria-label="Next"><span class="caret" aria-hidden="true">›</span></div>
         <div class="stage"><img id="lbImg" alt="" draggable="false"></div>
-        <button class="ctrl rotate" id="btnRotate" type="button">Rotate</button>
         <button class="ctrl close" id="btnClose" type="button" aria-label="Close">Close ✕</button>
         <div class="lb-copyright">
             All photos copyright Travis Hartman Photography 2026. Not for use without express permission.
@@ -247,10 +241,6 @@
             document.getElementById("navNext").addEventListener("click", next);
             document.getElementById("navPrev").addEventListener("click", prev);
             document.getElementById("btnClose").addEventListener("click", close);
-            document.getElementById("btnRotate").addEventListener("click", function (e) {
-                e.stopPropagation();
-                setRotated(!lbImg.classList.contains("rot"));
-            });
 
             document.addEventListener("keydown", function (e) {
                 if (!lb.classList.contains("open")) return;
