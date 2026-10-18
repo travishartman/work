@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Refresh the "Recent Work" links in index.html from Travis Hartman's Reuters byline.
 
-Reuters bot-walls the author page (DataDome), so discovery uses the Google
-Programmable Search API (free tier) plus a curated fallback list (data/links.txt).
-Each candidate is validated and enriched with its Open Graph share metadata
-(og:title / og:description), ranked newest-first, and the top links are written
-into the Recent Work block. The file is only rewritten when all checks pass.
+Reuters bot-walls the author page (DataDome), so discovery uses Google News RSS
+(keyless), resolving each result to its real reuters.com URL, plus a curated
+fallback list (data/links.txt). Each candidate is validated and enriched with its
+Open Graph share metadata (og:title / og:description), ranked newest-first, and
+the top links are written into the Recent Work block. The file is only rewritten
+when all checks pass.
 
-Env (optional, for live discovery): GOOGLE_API_KEY, GOOGLE_CSE_ID.
 Usage: python3 tools/scrape_reuters.py [--limit 4] [--dry-run]
 """
 from __future__ import annotations
@@ -21,7 +21,9 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote, urlparse
+from xml.etree import ElementTree as ET
 
 import requests
 from bs4 import BeautifulSoup
@@ -31,7 +33,8 @@ INDEX_PATH = os.path.join(ROOT, "index.html")
 LINKS_PATH = os.path.join(ROOT, "data", "links.txt")
 
 AUTHOR_NAME = "Travis Hartman"
-SEARCH_QUERY = f'site:reuters.com "{AUTHOR_NAME}"'
+SEARCH_QUERY = f'"{AUTHOR_NAME}" reuters'
+GNEWS_SEARCH = "https://news.google.com/rss/search"
 
 HEADERS = {
     "User-Agent": (
@@ -42,11 +45,6 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# Reuters article URL shape (section + slug), excludes author/section index pages.
-ARTICLE_RE = re.compile(
-    r"^https?://www\.reuters\.com/(?:graphics|investigates|world|business|markets|"
-    r"legal|technology|sustainability|science|sports|lifestyle)/[^?#]+/[^/?#]+/?$"
-)
 # Matches the Recent Work block (NOT the identical Prior Work block).
 RECENT_BLOCK_RE = re.compile(
     r'(Recent Work</a>\s*</h1>\s*<div class="text">)(.*?)(</div>)', re.S
@@ -77,6 +75,25 @@ def parse_date(value: str | None) -> datetime | None:
         return None
 
 
+def parse_date_rfc(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def looks_like_article(url: str) -> bool:
+    path = urlparse(url).path
+    if not path or path == "/":
+        return False
+    skip = ("/authors/", "/sitemap", "/info-pages/", "/subscribe", "/newsletters",
+            "/tag/", "/account/")
+    return "reuters.com" in url and not any(path.startswith(s) for s in skip)
+
+
 def fetch(url: str, retries: int = 3) -> tuple[int, str | None]:
     """GET with browser headers and simple backoff. Returns (status, html|None)."""
     last = 0
@@ -94,40 +111,76 @@ def fetch(url: str, retries: int = 3) -> tuple[int, str | None]:
     return last, None
 
 
-def google_cse(query: str, api_key: str, cse_id: str, want: int = 10) -> list[Item]:
-    """Discover byline articles via Google Programmable Search (free tier)."""
-    items: list[Item] = []
+def _gnews_resolve(session: requests.Session, gnews_url: str) -> str | None:
+    """Resolve a Google News RSS article link to its real target via batchexecute."""
+    m = re.search(r"/articles/([A-Za-z0-9_\-]+)", gnews_url)
+    if not m:
+        return None
+    aid = m.group(1)
     try:
-        r = requests.get(
-            "https://www.googleapis.com/customsearch/v1",
-            params={"key": api_key, "cx": cse_id, "q": query, "num": min(want, 10)},
-            headers={"Accept": "application/json"},
+        page = session.get(f"https://news.google.com/rss/articles/{aid}", timeout=30)
+        sig = re.search(r'data-n-a-sg="([^"]+)"', page.text)
+        ts = re.search(r'data-n-a-ts="([^"]+)"', page.text)
+        if not (sig and ts):
+            return None
+        inner = [
+            "garturlreq",
+            [["en-US", "US", ["FINANCE_TOP_INDICES", "WEB_TEST_1_0_0"],
+              None, None, 1, 1, "US:en", None, 180, None, None, None, None, None,
+              0, None, None, [1]],
+             "en-US", "US", 1, [2, 4, 8], 1, 1, None, 0, 0, None, 0],
+            aid, int(ts.group(1)), sig.group(1),
+        ]
+        payload = "f.req=" + quote(
+            json.dumps([[["Fbv4je", json.dumps(inner), None, "generic"]]])
+        )
+        resp = session.post(
+            "https://news.google.com/_/DotsSplashUi/data/batchexecute",
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+            timeout=30,
+        )
+        hit = re.search(r'https?://www\.reuters\.com/[^\\"]+', resp.text)
+        return hit.group(0) if hit else None
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def google_news(query: str, want: int = 12) -> list[Item]:
+    """Discover byline articles via Google News RSS (keyless), resolved to real URLs."""
+    items: list[Item] = []
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    try:
+        r = session.get(
+            GNEWS_SEARCH,
+            params={"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"},
             timeout=30,
         )
         if r.status_code != 200:
-            print(f"  [cse] HTTP {r.status_code}: {r.text[:140]}", file=sys.stderr)
+            print(f"  [gnews] HTTP {r.status_code}", file=sys.stderr)
             return items
-        data = r.json()
-    except (requests.RequestException, ValueError) as exc:
-        print(f"  [cse] error: {exc}", file=sys.stderr)
+        root = ET.fromstring(r.content)
+    except (requests.RequestException, ET.ParseError) as exc:
+        print(f"  [gnews] error: {exc}", file=sys.stderr)
         return items
 
-    for res in data.get("items", []):
-        url = res.get("link", "")
-        if not ARTICLE_RE.match(canonical(url).rstrip("/")) and not ARTICLE_RE.match(url):
+    for node in root.findall(".//item")[:want]:
+        source = (node.findtext("{*}source") or node.findtext("source") or "").strip()
+        if source and source.lower() != "reuters":
             continue
-        meta = {}
-        pagemap = res.get("pagemap", {})
-        if pagemap.get("metatags"):
-            meta = pagemap["metatags"][0]
-        title = meta.get("og:title") or res.get("title")
-        desc = meta.get("og:description") or res.get("snippet")
-        published = parse_date(
-            meta.get("article:published_time") or meta.get("og:article:published_time")
-        )
+        real = _gnews_resolve(session, (node.findtext("link") or "").strip())
+        if not real:
+            continue
+        real = canonical(real)
+        if not looks_like_article(real):
+            continue
+        title = _clean(node.findtext("title"))
+        if title:
+            title = re.sub(r"\s*-\s*Reuters\s*$", "", title)
         items.append(
-            Item(url=canonical(url), title=_clean(title), description=_clean(desc),
-                 published=published, sources={"cse"})
+            Item(url=real, title=title,
+                 published=parse_date_rfc(node.findtext("pubDate")), sources={"gnews"})
         )
     return items
 
@@ -266,15 +319,15 @@ def main() -> int:
         return 1
     existing = read_existing_recent(index_html)
 
-    # Build candidate pool: Google Programmable Search first, curated list as floor.
+    # Build candidate pool: Google News RSS first, curated list as floor.
     pool: dict[str, Item] = {}
-    api_key, cse_id = os.getenv("GOOGLE_API_KEY"), os.getenv("GOOGLE_CSE_ID")
-    if api_key and cse_id:
-        print("Discovery: Google Programmable Search")
-        for it in google_cse(args.query, api_key, cse_id, want=10):
+    print("Discovery: Google News RSS")
+    try:
+        for it in google_news(args.query, want=12):
             pool.setdefault(it.url, it)
-    else:
-        print("Discovery: none (no GOOGLE_API_KEY/GOOGLE_CSE_ID) — using curated list")
+    except Exception as exc:  # discovery must never break the fail-safe rewrite
+        print(f"  [gnews] unexpected error: {exc}", file=sys.stderr)
+    print(f"  discovered {len(pool)} article(s)")
 
     for url in read_links_file(LINKS_PATH):
         pool.setdefault(url, Item(url=url, sources={"curated"}))
@@ -283,11 +336,12 @@ def main() -> int:
         print("ERROR: no candidate URLs", file=sys.stderr)
         return 1
 
-    # Validate + enrich. Rank newest-first only when every item is dated
-    # (live discovery); otherwise keep discovery/curated order for predictability.
+    # Validate + enrich, then rank newest-first (undated items last).
     resolved = [it for it in pool.values() if resolve(it, existing)]
-    if resolved and all(it.published for it in resolved):
-        resolved.sort(key=lambda it: it.published, reverse=True)
+    resolved.sort(
+        key=lambda it: it.published or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
     chosen = resolved[: args.limit]
 
     if len(chosen) < args.limit:

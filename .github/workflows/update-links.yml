@@ -26,9 +26,6 @@ jobs:
         run: pip install -r tools/requirements.txt
 
       - name: Refresh Recent Work links
-        env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
         run: python3 tools/scrape_reuters.py
 
       - name: Commit changes if any
