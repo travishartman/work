@@ -11,6 +11,7 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
             --gap: 6px;
+            --band: 73px; /* top black band, mirrors the footer band below */
             --cols: 5;
             --fg: #e9e9e9;
             --muted: #8a8a8a;
@@ -32,7 +33,7 @@
             display: grid;
             grid-template-columns: repeat(var(--cols), 1fr);
             gap: var(--gap);
-            padding: var(--gap);
+            padding: var(--band) var(--gap) var(--gap);
             width: 100%;
         }
         .cell {
