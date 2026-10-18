@@ -1,0 +1,7 @@
+# Full-res photo originals — keep local, never publish.
+photos/
+
+# OS / tooling cruft
+.DS_Store
+__pycache__/
+*.pyc

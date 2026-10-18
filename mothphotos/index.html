@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Moths — Travis Hartman</title>
+    <meta name="robots" content="noai, noimageai, noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <link rel="stylesheet" href="../geist-fonts.css">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --gap: 6px;
+            --cols: 5;
+            --fg: #e9e9e9;
+            --muted: #8a8a8a;
+        }
+        html, body { background: #000; color: var(--fg); }
+        body {
+            font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ---------- grid ---------- */
+        .grid {
+            flex: 1 0 auto;
+            display: grid;
+            grid-template-columns: repeat(var(--cols), 1fr);
+            gap: var(--gap);
+            padding: var(--gap);
+            width: 100%;
+        }
+        .cell {
+            border: 0;
+            padding: 0;
+            margin: 0;
+            background: #0a0a0a;
+            cursor: pointer;
+            overflow: hidden;
+            aspect-ratio: 3 / 2;
+            outline: none;
+        }
+        .cell img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            opacity: 0;
+            transition: opacity .4s ease;
+            -webkit-user-select: none; user-select: none;
+            -webkit-user-drag: none;
+        }
+        .cell img.loaded { opacity: 1; }
+        .cell:hover img.loaded { opacity: .82; }
+        .cell:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+
+        @media (max-width: 1100px) { :root { --cols: 4; } }
+        @media (max-width: 760px)  { :root { --cols: 3; } }
+        @media (max-width: 520px)  { :root { --cols: 2; } }
+
+        /* ---------- footer ---------- */
+        .copyright {
+            flex-shrink: 0;
+            text-align: center;
+            color: var(--muted);
+            font-size: 11px;
+            letter-spacing: .02em;
+            padding: 22px 16px 28px;
+        }
+
+        /* ---------- lightbox ---------- */
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            display: none;
+            z-index: 100;
+            touch-action: none;
+        }
+        .lightbox.open { display: block; }
+        .lightbox .stage {
+            position: absolute;
+            inset: 0 0 42px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .lightbox img {
+            max-width: 100vw;
+            max-height: calc(100vh - 42px);
+            object-fit: contain;
+            -webkit-user-select: none; user-select: none;
+            -webkit-user-drag: none;
+            transition: transform .25s ease;
+        }
+        .lightbox img.rot {
+            max-width: calc(100vh - 42px);
+            max-height: 100vw;
+            transform: rotate(90deg);
+        }
+        /* click zones */
+        .nav {
+            position: absolute;
+            top: 0; bottom: 42px;
+            width: 38%;
+            cursor: pointer;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+        }
+        .nav.prev { left: 0; justify-content: flex-start; }
+        .nav.next { right: 0; justify-content: flex-end; }
+        .caret {
+            font-size: 30px;
+            line-height: 1;
+            color: rgba(255,255,255,.5);
+            padding: 0 20px;
+            -webkit-user-select: none; user-select: none;
+            transition: color .2s ease, transform .2s ease;
+        }
+        .nav:hover .caret { color: #fff; }
+        .nav.prev:hover .caret { transform: translateX(-3px); }
+        .nav.next:hover .caret { transform: translateX(3px); }
+        @media (hover: none) { .caret { color: rgba(255,255,255,.42); } }
+        /* controls */
+        .ctrl {
+            position: absolute;
+            z-index: 3;
+            background: rgba(0,0,0,.35);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,.25);
+            border-radius: 999px;
+            font: inherit;
+            font-size: 12px;
+            line-height: 1;
+            padding: 9px 12px;
+            cursor: pointer;
+            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(6px);
+        }
+        .ctrl:hover { background: rgba(0,0,0,.6); }
+        .ctrl.close { top: 14px; right: 14px; }
+        .ctrl.rotate { top: 14px; left: 14px; display: none; }
+        .lightbox .lb-copyright {
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            font-size: 11px;
+            padding: 0 16px;
+            text-align: center;
+        }
+        /* show rotate affordance on touch / small screens */
+        @media (hover: none), (max-width: 760px) {
+            .ctrl.rotate { display: block; }
+        }
+    </style>
+</head>
+<body>
+    <main class="grid" id="grid" aria-label="Moth photographs"></main>
+
+    <footer class="copyright">
+        All photos copyright Travis Hartman Photography 2026. Not for use without express permission.
+    </footer>
+
+    <div class="lightbox" id="lightbox">
+        <div class="nav prev" id="navPrev" aria-label="Previous"><span class="caret" aria-hidden="true">‹</span></div>
+        <div class="nav next" id="navNext" aria-label="Next"><span class="caret" aria-hidden="true">›</span></div>
+        <div class="stage"><img id="lbImg" alt="" draggable="false"></div>
+        <button class="ctrl rotate" id="btnRotate" type="button">Rotate</button>
+        <button class="ctrl close" id="btnClose" type="button" aria-label="Close">Close ✕</button>
+        <div class="lb-copyright">
+            All photos copyright Travis Hartman Photography 2026. Not for use without express permission.
+        </div>
+    </div>
+
+    <script src="photos.js"></script>
+    <script>
+        (function () {
+            var photos = window.MOTH_PHOTOS || [];
+            var grid = document.getElementById("grid");
+            var lb = document.getElementById("lightbox");
+            var lbImg = document.getElementById("lbImg");
+            var current = -1;
+            var opener = null;
+            lb.inert = true;
+
+            // Build grid
+            photos.forEach(function (p, i) {
+                var btn = document.createElement("button");
+                btn.className = "cell";
+                btn.type = "button";
+                btn.setAttribute("aria-label", "Open photo " + (i + 1));
+                var img = new Image();
+                img.loading = "lazy";
+                img.decoding = "async";
+                img.alt = "";
+                img.draggable = false;
+                img.src = "thumb/" + p.f;
+                img.addEventListener("load", function () { img.classList.add("loaded"); });
+                btn.appendChild(img);
+                btn.addEventListener("click", function () { open(i, btn); });
+                grid.appendChild(btn);
+            });
+
+            function open(i, el) {
+                if (el) opener = el;
+                current = i;
+                setRotated(false);
+                lbImg.src = "img/" + photos[i].f;
+                lb.inert = false;
+                lb.classList.add("open");
+                document.body.style.overflow = "hidden";
+            }
+            function close() {
+                lb.classList.remove("open");
+                lbImg.removeAttribute("src");
+                document.body.style.overflow = "";
+                current = -1;
+                if (opener) opener.focus();  // restore focus before hiding
+                lb.inert = true;
+            }
+            // No loop: stepping past either end returns to the grid.
+            function next() {
+                if (current >= photos.length - 1) { close(); return; }
+                open(current + 1);
+            }
+            function prev() {
+                if (current <= 0) { close(); return; }
+                open(current - 1);
+            }
+            function setRotated(on) {
+                lbImg.classList.toggle("rot", on);
+            }
+
+            document.getElementById("navNext").addEventListener("click", next);
+            document.getElementById("navPrev").addEventListener("click", prev);
+            document.getElementById("btnClose").addEventListener("click", close);
+            document.getElementById("btnRotate").addEventListener("click", function (e) {
+                e.stopPropagation();
+                setRotated(!lbImg.classList.contains("rot"));
+            });
+
+            document.addEventListener("keydown", function (e) {
+                if (!lb.classList.contains("open")) return;
+                if (e.key === "Escape") close();
+                else if (e.key === "ArrowRight") next();
+                else if (e.key === "ArrowLeft") prev();
+            });
+
+            // Touch swipe
+            var sx = 0, sy = 0, tracking = false;
+            lb.addEventListener("touchstart", function (e) {
+                if (e.touches.length !== 1) return;
+                tracking = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+            }, { passive: true });
+            lb.addEventListener("touchend", function (e) {
+                if (!tracking) return;
+                tracking = false;
+                var t = e.changedTouches[0];
+                var dx = t.clientX - sx, dy = t.clientY - sy;
+                if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+                    if (dx < 0) next(); else prev();
+                }
+            }, { passive: true });
+
+            // Deter casual copying (weak by design)
+            document.addEventListener("contextmenu", function (e) {
+                if (e.target.tagName === "IMG") e.preventDefault();
+            });
+        })();
+    </script>
+</body>
+</html>
