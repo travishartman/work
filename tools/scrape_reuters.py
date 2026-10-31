@@ -20,7 +20,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote, urlparse
 from xml.etree import ElementTree as ET
@@ -35,6 +35,7 @@ LINKS_PATH = os.path.join(ROOT, "data", "links.txt")
 AUTHOR_NAME = "Travis Hartman"
 SEARCH_QUERY = f'"{AUTHOR_NAME}" reuters'
 GNEWS_SEARCH = "https://news.google.com/rss/search"
+DEFAULT_MAX_AGE_DAYS = 90
 
 HEADERS = {
     "User-Agent": (
@@ -308,9 +309,12 @@ def render_block(items: list[Item]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=4)
+    ap.add_argument("--max-age-days", type=int, default=DEFAULT_MAX_AGE_DAYS)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--query", default=SEARCH_QUERY)
     args = ap.parse_args()
+    if args.max_age_days < 0:
+        ap.error("--max-age-days must be non-negative")
 
     with open(INDEX_PATH, encoding="utf-8") as fh:
         index_html = fh.read()
@@ -336,17 +340,29 @@ def main() -> int:
         print("ERROR: no candidate URLs", file=sys.stderr)
         return 1
 
-    # Validate + enrich, then rank newest-first (undated items last).
+    # Validate + enrich, then keep only dated items within the freshness window.
     resolved = [it for it in pool.values() if resolve(it, existing)]
-    resolved.sort(
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=args.max_age_days)
+    fresh = [
+        it for it in resolved
+        if it.published is not None and cutoff <= it.published <= now
+    ]
+    excluded = len(resolved) - len(fresh)
+    if excluded:
+        print(f"  excluded {excluded} stale, undated, or future-dated link(s)")
+    fresh.sort(
         key=lambda it: it.published or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
-    chosen = resolved[: args.limit]
+    chosen = fresh[: args.limit]
 
     if len(chosen) < args.limit:
-        print(f"ERROR: only {len(chosen)} valid links, need {args.limit}; "
-              "leaving index.html unchanged", file=sys.stderr)
+        print(
+            f"ERROR: only {len(chosen)} fresh links within {args.max_age_days} days, "
+            f"need {args.limit}; leaving index.html unchanged",
+            file=sys.stderr,
+        )
         return 1
 
     print("\nRecent Work ->")

@@ -1,8 +1,9 @@
 name: Update Recent Work links
 
 on:
-  schedule:
-    - cron: "17 11 * * *"   # daily ~11:17 UTC
+  # Daily schedule paused; restore to resume Google News updates.
+  # schedule:
+  #   - cron: "17 11 * * *"
   workflow_dispatch:
 
 permissions:
