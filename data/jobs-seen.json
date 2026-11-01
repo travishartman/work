@@ -1,0 +1,16 @@
+{
+  "feeds": {
+    "dvs-jobs": {
+      "seen": [
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8591",
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8534",
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8532",
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8517",
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8506",
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8504",
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8483",
+        "https://datavisualizationsociety.org/?post_type=job_listing&p=8448"
+      ]
+    }
+  }
+}
