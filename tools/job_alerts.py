@@ -30,7 +30,7 @@ import re
 import smtplib
 import ssl
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
@@ -87,7 +87,7 @@ class Job:
     summary: str
     text: str
     feed_name: str
-
+    also_in: list[str] = field(default_factory=list)
 
 def local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
@@ -195,13 +195,17 @@ def canonical_url(url: str) -> str:
 def drop_duplicates(jobs: list[Job], already_sent: list[str]) -> list[Job]:
     """Keep the first posting per destination; skip any destination already emailed."""
     taken = set(already_sent)
-    unique: list[Job] = []
+    kept: dict[str, Job] = {}
     for j in jobs:
         key = canonical_url(j.url)
-        if key not in taken:
-            taken.add(key)
-            unique.append(j)
-    return unique
+        if key in taken and key not in kept:
+            continue
+        if key in kept:
+            if j.feed_name != kept[key].feed_name and j.feed_name not in kept[key].also_in:
+                kept[key].also_in.append(j.feed_name)
+            continue
+        kept[key] = j
+    return list(kept.values())
 
 
 def select_new(
@@ -227,6 +231,10 @@ def when_label(dt: datetime | None) -> str:
     return f"{dt:%b} {dt.day}, {dt.year}" if dt else ""
 
 
+def source_label(j: Job) -> str:
+    return f"Source: {j.feed_name}" + (f" (also in {', '.join(j.also_in)})" if j.also_in else "")
+
+
 def render(jobs: list[Job]) -> tuple[str, str]:
     by_feed: dict[str, list[Job]] = {}
     for j in jobs:
@@ -239,11 +247,12 @@ def render(jobs: list[Job]) -> tuple[str, str]:
         rich.append(f'<h2 style="font-size:16px;margin:24px 0 8px">{html.escape(feed_name)}</h2>')
         for j in items:
             meta = [m for m in (j.company, j.location, j.job_type, when_label(j.published)) if m]
-            plain.append(f"{j.title}\n  {' | '.join(meta)}\n  {j.url}\n  {j.summary}\n")
+            plain.append(f"{j.title}\n  {' | '.join(meta)}\n  {source_label(j)}\n  {j.url}\n  {j.summary}\n")
             rich.append(
                 f'<p style="margin:0 0 18px"><a href="{html.escape(j.url, quote=True)}" '
                 f'style="font-size:16px"><strong>{html.escape(j.title)}</strong></a><br>'
                 f'<span style="color:#555;font-size:13px">{html.escape(" | ".join(meta))}</span><br>'
+                f'<span style="color:#555;font-size:12px">{html.escape(source_label(j))}</span><br>'
                 f'<span style="font-size:14px">{html.escape(j.summary)}</span><br>'
                 f'<a href="{html.escape(j.url, quote=True)}" style="font-size:13px">View listing</a></p>'
             )
@@ -343,7 +352,7 @@ def main() -> int:
             print("\nWould email:")
             for j in to_send:
                 where = ", ".join(p for p in (j.company, j.location) if p)
-                print(f"  - {j.title} ({where})\n    {j.url}")
+                print(f"  - {j.title} ({where}) [{j.feed_name}]\n    {j.url}")
         else:
             missing = [k for k in ("SMTP_USER", "SMTP_PASSWORD", "ALERT_TO") if not os.environ.get(k)]
             if missing:

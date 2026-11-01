@@ -163,6 +163,16 @@ class DuplicateTests(unittest.TestCase):
         self.assertEqual([j.feed_name for j in kept], ["Direct", "F"])
         self.assertEqual([j.url for j in kept], [a.url, c.url])
 
+    def test_email_names_the_source_feed_and_duplicates(self):
+        a = self.job("https://x.org/job/1", "Direct")
+        b = self.job("https://www.x.org/job/1/?utm_source=g", "Google")
+        c = self.job("https://x.org/job/2", "WWR")
+        (first, second) = ja.drop_duplicates([a, b, c], [])
+        plain, rich = ja.render([first, second])
+        self.assertIn("Source: Direct (also in Google)", plain)
+        self.assertIn("Source: WWR", plain)
+        self.assertIn("Source: Direct (also in Google)", rich)
+
 
 class SelectNewTests(unittest.TestCase):
     def setUp(self):

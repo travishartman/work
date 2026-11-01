@@ -31,6 +31,13 @@
       ]
     },
     {
+      "id": "source-opennews",
+      "name": "OpenNews Source Jobs",
+      "url": "https://source.opennews.org/jobs/rss/",
+      "enabled": true,
+      "remote_only": true
+    },
+    {
       "id": "google-alert-jobboards",
       "name": "Google Alert: job boards",
       "url_env": "ALERT_FEED_JOBBOARDS",
