@@ -1,5 +1,5 @@
 {
-  "notes": "Catalog of RSS/Atom job feeds checked by tools/job_alerts.py. Add an object to 'feeds' to watch another feed. Per-feed options: enabled (bool), remote_only (bool, default true), include / exclude (lists of regex that replace the defaults).",
+  "notes": "Catalog of RSS/Atom job feeds checked by tools/job_alerts.py. Add an object to 'feeds' to watch another feed. Per-feed options: enabled (bool); remote_only (bool, default true; set false for feeds that only list remote jobs); keywords (regex list, a posting must match one in its title or summary); include / exclude (regex lists that replace the remote-detection defaults); url_env (read the feed URL from this environment variable instead of 'url'); block_domains (drop postings on these domains or suffixes such as .shop).",
   "feeds": [
     {
       "id": "dvs-jobs",
@@ -7,6 +7,44 @@
       "url": "https://datavisualizationsociety.org/?feed=job_feed&job_types=contract%2Cfreelance%2Cfull-time%2Cinternship%2Cother%2Cpaid-internship%2Cpart-time%2Ctemporary&search_location&job_categories&search_keywords&author",
       "enabled": true,
       "remote_only": true
+    },
+    {
+      "id": "wwr-all",
+      "name": "We Work Remotely",
+      "url": "https://weworkremotely.com/remote-jobs.rss",
+      "enabled": true,
+      "remote_only": false,
+      "keywords": [
+        "data[- ]?vi[sz](ualization|ualisation)?",
+        "dataviz",
+        "information design",
+        "infographic",
+        "data journalis",
+        "data storytelling",
+        "news graphics",
+        "graphics (editor|developer|journalist|reporter|engineer)",
+        "visual(s)? (journalist|engineer|developer|designer)",
+        "cartograph",
+        "\\bD3(\\.js)?\\b",
+        "observable",
+        "interactive (graphics|developer|designer|storytelling)"
+      ]
+    },
+    {
+      "id": "google-alert-jobboards",
+      "name": "Google Alert: job boards",
+      "url_env": "ALERT_FEED_JOBBOARDS",
+      "enabled": true,
+      "remote_only": true,
+      "block_domains": [".shop"]
+    },
+    {
+      "id": "google-alert-any",
+      "name": "Google Alert: any site",
+      "url_env": "ALERT_FEED_ANY",
+      "enabled": true,
+      "remote_only": true,
+      "block_domains": [".shop"]
     }
   ]
 }

@@ -79,6 +79,90 @@ class FilterTests(unittest.TestCase):
     def test_no_signal_is_not_remote(self):
         self.assertFalse(ja.is_remote("Analyst in Washington, DC", ja.DEFAULT_INCLUDE, ja.DEFAULT_EXCLUDE))
 
+    def test_remote_synonyms(self):
+        for text in ("This is a WFH role", "Telecommuting available", "Work from anywhere",
+                     "Home-based position", "Location independent team", "Fully distributed team",
+                     "Open to candidates anywhere in the US", "Virtual position"):
+            self.assertTrue(ja.is_remote(text, ja.DEFAULT_INCLUDE, ja.DEFAULT_EXCLUDE), text)
+
+    def test_negated_synonym_is_excluded(self):
+        self.assertFalse(ja.is_remote("Telework is not available; onsite only", ja.DEFAULT_INCLUDE, ja.DEFAULT_EXCLUDE))
+
+
+class KeywordTests(unittest.TestCase):
+    WWR = b"""<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>Acme: Data Visualization Engineer</title><link>https://example.org/a</link>
+<region>Anywhere in the World</region><category>Programming</category>
+<description>Build charts.</description></item>
+<item><title>Acme: Sales Rep</title><link>https://example.org/b</link>
+<description>Sell things. Familiar with data visualization tools a plus.</description></item>
+<item><title>Acme: Support Agent</title><link>https://example.org/c</link>
+<description>Answer tickets.</description></item>
+</channel></rss>"""
+
+    def setUp(self):
+        self.jobs = ja.parse_feed(self.WWR, "WWR")
+
+    def test_no_keywords_keeps_everything(self):
+        self.assertTrue(all(ja.matches_keywords(j, []) for j in self.jobs))
+
+    def test_keywords_match_title_or_summary_case_insensitively(self):
+        kept = [j.url for j in self.jobs if ja.matches_keywords(j, ["data[- ]?visuali[sz]ation"])]
+        self.assertEqual(kept, ["https://example.org/a", "https://example.org/b"])
+
+    def test_non_matching_keywords_drop_everything(self):
+        self.assertFalse(any(ja.matches_keywords(j, ["cartograph"]) for j in self.jobs))
+
+
+class GoogleAlertTests(unittest.TestCase):
+    FEED = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+<id>tag:google.com,2013:googlealerts/feed:1</id>
+<title type="html">&lt;b&gt;Remote&lt;/b&gt; Data Visualization Engineer</title>
+<link href="https://www.google.com/url?rct=j&amp;sa=t&amp;url=https://boards.greenhouse.io/acme/jobs/1&amp;ct=ga"/>
+<published>2026-10-31T07:53:58Z</published>
+<content type="html">&lt;b&gt;Remote&lt;/b&gt; role building charts.</content>
+</entry></feed>"""
+
+    def test_redirect_unwrapped_and_title_cleaned(self):
+        (job,) = ja.parse_feed(self.FEED, "G")
+        self.assertEqual(job.url, "https://boards.greenhouse.io/acme/jobs/1")
+        self.assertEqual(job.title, "Remote Data Visualization Engineer")
+        self.assertTrue(remote(job))
+
+    def test_non_redirect_google_url_left_alone(self):
+        self.assertEqual(ja.unwrap_redirect("https://example.org/x"), "https://example.org/x")
+
+    def test_blocked_domains_and_suffixes(self):
+        self.assertTrue(ja.is_blocked("https://jobhaven.shop/a", [".shop"]))
+        self.assertTrue(ja.is_blocked("https://www.spam.com/a", ["spam.com"]))
+        self.assertFalse(ja.is_blocked("https://notspam.com/a", ["spam.com"]))
+        self.assertFalse(ja.is_blocked("https://example.org/a", []))
+
+
+class DuplicateTests(unittest.TestCase):
+    def job(self, url, feed="F"):
+        return ja.Job(uid=url, title="T", url=url, company="", location="", job_type="",
+                      published=None, summary="", text="T", feed_name=feed)
+
+    def test_same_destination_variants_share_a_key(self):
+        base = ja.canonical_url("https://boards.greenhouse.io/acme/jobs/1?gh_jid=1")
+        for variant in ("http://www.boards.greenhouse.io/acme/jobs/1/?gh_jid=1&utm_source=x#apply",
+                        "https://BOARDS.greenhouse.io/acme/jobs/1?utm_medium=a&gh_jid=1"):
+            self.assertEqual(ja.canonical_url(variant), base)
+
+    def test_different_ids_stay_distinct(self):
+        self.assertNotEqual(ja.canonical_url("https://x.org/jobs?gh_jid=1"), ja.canonical_url("https://x.org/jobs?gh_jid=2"))
+
+    def test_first_feed_wins_and_sent_urls_are_skipped(self):
+        a = self.job("https://x.org/job/1", "Direct")
+        b = self.job("https://www.x.org/job/1/?utm_source=g", "Google")
+        c = self.job("https://x.org/job/2")
+        d = self.job("https://x.org/job/3")
+        kept = ja.drop_duplicates([a, b, c, d], [ja.canonical_url(d.url)])
+        self.assertEqual([j.feed_name for j in kept], ["Direct", "F"])
+        self.assertEqual([j.url for j in kept], [a.url, c.url])
+
 
 class SelectNewTests(unittest.TestCase):
     def setUp(self):

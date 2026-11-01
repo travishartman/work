@@ -1,8 +1,11 @@
 name: Remote job alerts
 
 on:
+  # 7:45 AM Pacific. Cron is UTC-only, so both offsets are listed and the gate job
+  # lets through only the run that lands in the 7:30-8:30 AM Pacific window.
   schedule:
-    - cron: "17 */6 * * *"   # every 6 hours
+    - cron: "45 14 * * *"   # 7:45 PDT
+    - cron: "45 15 * * *"   # 7:45 PST
   workflow_dispatch:
     inputs:
       include_backlog:
@@ -18,7 +21,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.window.outputs.run }}
+    steps:
+      - name: Check Pacific time window
+        id: window
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          now=$(TZ=America/Los_Angeles date +%H%M)
+          echo "Pacific time: $now, event: $EVENT"
+          if [ "$EVENT" != "schedule" ] || { [ "$now" -ge 0730 ] && [ "$now" -le 0830 ]; }; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   alerts:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +61,8 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           ALERT_TO: ${{ secrets.ALERT_TO }}
+          ALERT_FEED_JOBBOARDS: ${{ secrets.ALERT_FEED_JOBBOARDS }}
+          ALERT_FEED_ANY: ${{ secrets.ALERT_FEED_ANY }}
           INCLUDE_BACKLOG: ${{ inputs.include_backlog }}
         run: |
           if [ "$INCLUDE_BACKLOG" = "true" ]; then
