@@ -1,0 +1,12 @@
+{
+  "notes": "Catalog of RSS/Atom job feeds checked by tools/job_alerts.py. Add an object to 'feeds' to watch another feed. Per-feed options: enabled (bool), remote_only (bool, default true), include / exclude (lists of regex that replace the defaults).",
+  "feeds": [
+    {
+      "id": "dvs-jobs",
+      "name": "Data Visualization Society",
+      "url": "https://datavisualizationsociety.org/?feed=job_feed&job_types=contract%2Cfreelance%2Cfull-time%2Cinternship%2Cother%2Cpaid-internship%2Cpart-time%2Ctemporary&search_location&job_categories&search_keywords&author",
+      "enabled": true,
+      "remote_only": true
+    }
+  ]
+}
