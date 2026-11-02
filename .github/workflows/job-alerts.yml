@@ -33,7 +33,7 @@ jobs:
         run: |
           now=$(TZ=America/Los_Angeles date +%H%M)
           echo "Pacific time: $now, event: $EVENT"
-          if [ "$EVENT" != "schedule" ] || { [ "$now" -ge 0730 ] && [ "$now" -le 0830 ]; }; then
+          if [ "$EVENT" != "schedule" ] || { [ "$now" -ge 0730 ] && [ "$now" -le 1400 ]; }; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
