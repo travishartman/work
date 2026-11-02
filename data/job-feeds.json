@@ -1,5 +1,5 @@
 {
-  "notes": "Catalog of RSS/Atom job feeds checked by tools/job_alerts.py. Add an object to 'feeds' to watch another feed. Per-feed options: enabled (bool); remote_only (bool, default true; set false for feeds that only list remote jobs); keywords (regex list, a posting must match one in its title or summary); include / exclude (regex lists that replace the remote-detection defaults); url_env (read the feed URL from this environment variable instead of 'url'); block_domains (drop postings on these domains or suffixes such as .shop).",
+  "notes": "Catalog of RSS/Atom job feeds checked by tools/job_alerts.py. Add an object to 'feeds' to watch another feed. Per-feed options: enabled (bool); remote_only (bool, default true; set false for feeds that only list remote jobs); keywords (regex list, a posting must match one in its title or summary); include / exclude (regex lists that replace the remote-detection defaults); url_env (read the feed URL from this environment variable instead of 'url'); block_domains (drop postings on these domains or suffixes such as .shop); pages (fetch this many ?page=N pages of a paged feed).",
   "feeds": [
     {
       "id": "dvs-jobs",
@@ -38,12 +38,21 @@
       "remote_only": true
     },
     {
+      "id": "himalayas-dataviz",
+      "name": "Himalayas: data visualization",
+      "url": "https://himalayas.app/jobs/api/search?q=data%20visualization&sort=recent",
+      "enabled": true,
+      "remote_only": false,
+      "pages": 3,
+      "keywords": ["data[- ]?visuali[sz]ation", "dataviz", "data viz"]
+    },
+    {
       "id": "google-alert-jobboards",
       "name": "Google Alert: job boards",
       "url_env": "ALERT_FEED_JOBBOARDS",
       "enabled": true,
       "remote_only": true,
-      "block_domains": [".shop"]
+      "block_domains": [".shop", "himalayas.app"]
     },
     {
       "id": "google-alert-any",
@@ -51,7 +60,7 @@
       "url_env": "ALERT_FEED_ANY",
       "enabled": true,
       "remote_only": true,
-      "block_domains": [".shop"]
+      "block_domains": [".shop", "himalayas.app"]
     }
   ]
 }

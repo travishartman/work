@@ -126,8 +126,38 @@ def parse_when(value: str | None) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def parse_json_feed(content: bytes, feed_name: str) -> list[Job]:
+    """Himalayas-style JSON: {"jobs": [{title, guid, companyName, locationRestrictions, pubDate (epoch), ...}]}."""
+    jobs: list[Job] = []
+    for item in json.loads(content).get("jobs", []):
+        guid = str(item.get("guid") or "")
+        url = guid if guid.startswith("http") else str(item.get("applicationLink") or "")
+        title = strip_html(item.get("title", ""))
+        if urlparse(url).scheme not in ("http", "https") or not title:
+            continue
+        places = item.get("locationRestrictions") or []
+        location = ", ".join(places[:3]) + (f" +{len(places) - 3}" if len(places) > 3 else "")
+        body = strip_html(item.get("excerpt", ""))
+        stamp = item.get("pubDate")
+        jobs.append(Job(
+            uid=url,
+            title=title,
+            url=url,
+            company=strip_html(item.get("companyName", "")),
+            location=location,
+            job_type=strip_html(item.get("employmentType", "")),
+            published=datetime.fromtimestamp(stamp, timezone.utc) if isinstance(stamp, (int, float)) else None,
+            summary=body[:SNIPPET_CHARS].rstrip() + ("..." if len(body) > SNIPPET_CHARS else ""),
+            text=" ".join([title, item.get("companyName", ""), location, body]),
+            feed_name=feed_name,
+        ))
+    return jobs
+
+
 def parse_feed(content: bytes, feed_name: str) -> list[Job]:
-    """Parse RSS 2.0 or Atom. Extra fields (location, company, job_type) are read by local name."""
+    """Parse RSS 2.0, Atom or Himalayas-style JSON. Extra fields (location, company, job_type) are read by local name."""
+    if content.lstrip()[:1] == b"{":
+        return parse_json_feed(content, feed_name)
     root = ET.fromstring(content)
     entries = root.findall(".//item") or root.findall(".//{http://www.w3.org/2005/Atom}entry")
     jobs: list[Job] = []
@@ -316,11 +346,14 @@ def main() -> int:
         if not url:
             print(f"[{fid}] skipped: no feed URL (set {feed.get('url_env')})")
             continue
+        urls = [url] + [f"{url}{'&' if '?' in url else '?'}page={n}" for n in range(2, feed.get("pages", 1) + 1)]
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=30)
-            resp.raise_for_status()
-            jobs = parse_feed(resp.content, name)
-        except (requests.RequestException, ET.ParseError) as exc:
+            jobs = []
+            for page_url in urls:
+                resp = requests.get(page_url, headers=HEADERS, timeout=30)
+                resp.raise_for_status()
+                jobs.extend(parse_feed(resp.content, name))
+        except (requests.RequestException, ET.ParseError, ValueError) as exc:
             # Not str(exc): requests errors embed the URL, which may be a private feed.
             code = getattr(getattr(exc, "response", None), "status_code", None)
             print(f"[{fid}] ERROR: {type(exc).__name__}{f' HTTP {code}' if code else ''}", file=sys.stderr)

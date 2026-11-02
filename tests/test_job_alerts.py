@@ -224,3 +224,21 @@ class EmailTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JsonFeedTests(unittest.TestCase):
+    DATA = (b'{"jobs":['
+            b'{"title":"Senior Data Visualization Engineer","guid":"https://himalayas.app/companies/a/jobs/x",'
+            b'"applicationLink":"https://himalayas.app/companies/a/jobs/x?utm_source=api","companyName":"Acme",'
+            b'"locationRestrictions":["United States","Canada","Mexico","Brazil"],"employmentType":"Full Time",'
+            b'"pubDate":1793644119,"excerpt":"<p>Build dashboards.</p>"},'
+            b'{"title":"No link","guid":"nope"}]}')
+
+    def test_himalayas_json_parsed(self):
+        (job,) = ja.parse_feed(self.DATA, "Himalayas")
+        self.assertEqual(job.url, "https://himalayas.app/companies/a/jobs/x")
+        self.assertEqual(job.company, "Acme")
+        self.assertEqual(job.location, "United States, Canada, Mexico +1")
+        self.assertEqual(job.summary, "Build dashboards.")
+        self.assertEqual(job.published.year, 2026)
+        self.assertTrue(ja.matches_keywords(job, ["data[- ]?visuali[sz]ation"]))
